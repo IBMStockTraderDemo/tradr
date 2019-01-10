@@ -225,7 +225,7 @@ JsonSender.prototype.registerDC = function registerDC() {
                             var providerJson = JSON.parse(providerString);
                             if (providerJson && providerJson._items && providerJson._items.length === 1) {
                                 clearInterval(queryProviderInterval);
-                                restClient.postDCConfiguration(dcConfiguration, function(posterr, postres) {
+                                restClient.postDCConfiguration(dcConfiguration, 'NodejsDC', function(posterr, postres) {
                                     if (posterr) { return; }
                                     if (postres && ((postres.statusCode >= 200 && postres.statusCode < 300) ||
                                             postres.statusCode === 409)) {
@@ -875,7 +875,7 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
                     }
                 ]),
                 metrics: {
-                    recordResponseTime: req.goodResps[respIndex].resp
+                    requestResponseTime: req.goodResps[respIndex].resp
                 }
     
             })
@@ -895,7 +895,7 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
                     }
                 ]),
                 metrics: {
-                    recordResponseTime: req.badResps[respIndex].resp
+                    requestResponseTime: req.badResps[respIndex].resp
                 }
     
             })

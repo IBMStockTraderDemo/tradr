@@ -211,10 +211,10 @@
                 "name": "requestsRecords",
                 "description": "requests records",
                 "metrics": {
-                    "recordResponseTime": {
+                    "requestResponseTime": {
                         "dataType": "float",
-                        "displaylabel": "Request Record Response Time",
-                        "name": "Request Record Response Time",
+                        "displaylabel": "Request Response Time",
+                        "name": "Request Response Time",
                         "description": "The response time of the certain request",
                         "units": "milliseconds",
                         "tags": {

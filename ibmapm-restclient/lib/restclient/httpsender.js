@@ -271,14 +271,15 @@ module.exports.registerResource = function(obj, callback) {
     });
 };
 
-module.exports.postDCConfiguration = function(payload, callback) {
+module.exports.postDCConfiguration = function(payload, type, callback) {
     queue.addTask({
         payload: payload,
         type: 'dcconfig: ',
+        entityType: type,
         additionalHeader: {
             version: global.DC_VERSION,
             providerUniqueId: dcId,
-            entityType: 'provider'
+            entityType: type
         },
         callback: callback
     });
