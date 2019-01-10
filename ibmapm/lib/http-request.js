@@ -16,9 +16,19 @@ function HttpRequest(req, responseTime) {
 
     if (req.statusCode >= 400) {
         this.errorCount = 1;
-        this.badResps.push({resp: responseTime, timestamp: req.time, statusCode: req.statusCode});
+        this.badResps.push({
+            resp: responseTime,
+            timestamp: req.time,
+            statusCode: req.statusCode,
+            referer: req.requestHeader.referer ? req.requestHeader.referer : 'http://' + req.requestHeader.host + '/'
+        });
     } else {
-        this.goodResps.push({resp: responseTime, timestamp: req.time, statusCode: req.statusCode});
+        this.goodResps.push({
+            resp: responseTime,
+            timestamp: req.time,
+            statusCode: req.statusCode,
+            referer: req.requestHeader.referer ? req.requestHeader.referer : 'http://' + req.requestHeader.host + '/'
+        });
     }
     
     this.errorRate = this.errorCount / this.hitCount;
@@ -33,9 +43,19 @@ HttpRequest.prototype.updateResponseTime = function updateResponseTime(req, resp
 
     if (req.statusCode >= 400) {
         this.errorCount += 1;
-        this.badResps.push({resp: responseTime, timestamp: req.time, statusCode: req.statusCode});
+        this.badResps.push({
+            resp: responseTime,
+            timestamp: req.time,
+            statusCode: req.statusCode,
+            referer: req.requestHeader.referer ? req.requestHeader.referer : 'http://' + req.requestHeader.host + '/'
+        });
     } else {
-        this.goodResps.push({resp: responseTime, timestamp: req.time, statusCode: req.statusCode});
+        this.goodResps.push({
+            resp: responseTime,
+            timestamp: req.time,
+            statusCode: req.statusCode,
+            referer: req.requestHeader.referer ? req.requestHeader.referer : 'http://' + req.requestHeader.host + '/'
+        });
     }
     this.errorRate = this.errorCount / this.hitCount;
 };

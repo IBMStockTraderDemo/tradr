@@ -579,6 +579,7 @@ JsonSender.prototype.registerAppModelOnICP = function registerAppModelOnICP() {
             interfaceObj.properties.connections = interfaceObj.properties.connections.concat(
                 commonTools.combineArr(k8sutil.getNodeIPs(), ':', svc.nodePort));
         }
+        icpConnections = interfaceObj.properties.connections;
         restClient.registerResource(interfaceObj);
     }
 
@@ -861,44 +862,56 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
             }
         });
         for(var respIndex = 0; respIndex < req.goodResps.length; respIndex++){
-            requestsRecordsPayload.push({
+            var oneMetric = {
                 resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ? process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
                 timestamp: (new Date(req.goodResps[respIndex].timestamp)).toISOString(),
                 tags: commonTools.merge([dimensions_content,
                     {
                         applicationName: this.applicationName,
                         requestName: req['URL'],
-                        requestMethod: req['METHOD'],
+                        requestType: req['METHOD'],
                         _componentType: 'requestsRecords',
                         status: 'success',
-                        statusCode: req.goodResps[respIndex].statusCode+''
+                        statusCode: req.goodResps[respIndex].statusCode+'',
+                        requestDetail: req.goodResps[respIndex].referer + req['URL']
                     }
                 ]),
                 metrics: {
                     requestResponseTime: req.goodResps[respIndex].resp
                 }
     
-            })
+            };
+            if (this.isicp) {
+                oneMetric.tags.podName = k8sutil.getPodName();
+                oneMetric.tags.containerId = k8sutil.getContainerID();
+            }
+            requestsRecordsPayload.push(oneMetric);
         }
         for(var respIndex = 0; respIndex < req.badResps.length; respIndex++){
-            requestsRecordsPayload.push({
+            var badMetric = {
                 resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ? process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
                 timestamp: (new Date(req.badResps[respIndex].timestamp)).toISOString(),
                 tags: commonTools.merge([dimensions_content,
                     {
                         applicationName: this.applicationName,
                         requestName: req['URL'],
-                        requestMethod: req['METHOD'],
+                        requestType: req['METHOD'],
                         _componentType: 'requestsRecords',
-                        status: 'failed',
-                        statusCode: req.badResps[respIndex].statusCode+''
+                        status: 'fail',
+                        statusCode: req.badResps[respIndex].statusCode+'',
+                        requestDetail: req.badResps[respIndex].referer + req['URL']
                     }
                 ]),
                 metrics: {
                     requestResponseTime: req.badResps[respIndex].resp
                 }
     
-            })
+            };
+            if (this.isicp) {
+                badMetric.tags.podName = k8sutil.getPodName();
+                badMetric.tags.containerId = k8sutil.getContainerID();
+            }
+            requestsRecordsPayload.push(badMetric);
         }
     }
     return {summary: requestsSummaryPayload, record: requestsRecordsPayload};
