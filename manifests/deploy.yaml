@@ -83,6 +83,15 @@ spec:
               secretKeyRef:
                 name: ingress-host
                 key: host
+        volumeMounts:
+        - name: global-environment
+          mountPath: /opt/ibm/apm/serverconfig
+      volumes:
+      - name: global-environment
+        configMap:
+          name: apm-server-config
+          optional: true
+        
 ---
 #Deploy the service
 apiVersion: v1

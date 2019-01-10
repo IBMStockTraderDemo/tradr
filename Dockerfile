@@ -22,6 +22,7 @@ WORKDIR /usr/src/app
 RUN apk update && apk upgrade && apk add --no-cache git
 
 COPY . /usr/src/app/
+RUN npm install ./ibmapm
 RUN npm install --no-optional
 RUN npm run build
 

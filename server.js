@@ -13,7 +13,7 @@
    See the License for the specific language governing permissions and
    limitations under the License.
  */
-
+require('ibmapm');
 var express = require('express');
 var path = require('path');
 var favicon = require('serve-favicon');
