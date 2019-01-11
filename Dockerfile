@@ -27,6 +27,7 @@ RUN npm install ./ibmapm
 RUN npm install --no-optional
 RUN npm run build
 
+ENV LD_LIBRARY_PATH /usr/src/app/node_modules/appmetrics
 ENV HOST 0.0.0.0
 EXPOSE 3000
 
