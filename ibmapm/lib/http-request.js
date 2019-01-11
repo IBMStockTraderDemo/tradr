@@ -14,21 +14,21 @@ function HttpRequest(req, responseTime) {
     this.goodResps = [];
     this.badResps = [];
 
+    var responseJson = {
+        resp: responseTime,
+        timestamp: req.time,
+        statusCode: req.statusCode
+    };
+
+    if (req.requestHeader) {
+        responseJson.referer = req.requestHeader.referer ? req.requestHeader.referer : 'http://' + req.requestHeader.host + '/';
+    }
+
     if (req.statusCode >= 400) {
         this.errorCount = 1;
-        this.badResps.push({
-            resp: responseTime,
-            timestamp: req.time,
-            statusCode: req.statusCode,
-            referer: req.requestHeader.referer ? req.requestHeader.referer : 'http://' + req.requestHeader.host + '/'
-        });
+        this.badResps.push(responseJson);
     } else {
-        this.goodResps.push({
-            resp: responseTime,
-            timestamp: req.time,
-            statusCode: req.statusCode,
-            referer: req.requestHeader.referer ? req.requestHeader.referer : 'http://' + req.requestHeader.host + '/'
-        });
+        this.goodResps.push(responseJson);
     }
     
     this.errorRate = this.errorCount / this.hitCount;
@@ -41,21 +41,21 @@ HttpRequest.prototype.updateResponseTime = function updateResponseTime(req, resp
     this.averageResponseTime = this.totalResponseTime / this.hitCount;
     this.latestResponseTime = responseTime;
 
+    var responseJson = {
+        resp: responseTime,
+        timestamp: req.time,
+        statusCode: req.statusCode
+    };
+
+    if (req.requestHeader) {
+        responseJson.referer = req.requestHeader.referer ? req.requestHeader.referer : 'http://' + req.requestHeader.host + '/';
+    }
+
     if (req.statusCode >= 400) {
         this.errorCount += 1;
-        this.badResps.push({
-            resp: responseTime,
-            timestamp: req.time,
-            statusCode: req.statusCode,
-            referer: req.requestHeader.referer ? req.requestHeader.referer : 'http://' + req.requestHeader.host + '/'
-        });
+        this.badResps.push(responseJson);
     } else {
-        this.goodResps.push({
-            resp: responseTime,
-            timestamp: req.time,
-            statusCode: req.statusCode,
-            referer: req.requestHeader.referer ? req.requestHeader.referer : 'http://' + req.requestHeader.host + '/'
-        });
+        this.goodResps.push(responseJson);
     }
     this.errorRate = this.errorCount / this.hitCount;
 };
