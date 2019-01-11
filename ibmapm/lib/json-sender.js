@@ -579,7 +579,6 @@ JsonSender.prototype.registerAppModelOnICP = function registerAppModelOnICP() {
             interfaceObj.properties.connections = interfaceObj.properties.connections.concat(
                 commonTools.combineArr(k8sutil.getNodeIPs(), ':', svc.nodePort));
         }
-        icpConnections = interfaceObj.properties.connections;
         restClient.registerResource(interfaceObj);
     }
 
@@ -620,10 +619,12 @@ JsonSender.prototype.registerAppRuntimeOnICP = function registerAppRuntimeOnICP(
 
     };
     if (k8sutil.getContainerID()) {
-        runtimeObj.properties.containerId = k8sutil.getContainerID();
+        global.containerId = k8sutil.getContainerID();
+        runtimeObj.properties.containerId = global.containerId;
     }
     if (k8sutil.getPodName()) {
-        runtimeObj.properties.podName = k8sutil.getPodName();
+        global.podName = k8sutil.getPodName();
+        runtimeObj.properties.podName = global.podName;
     }
     for (let index = 0; index < this.serviceEndPointMD5Strings.length; index++) {
         const element = this.serviceEndPointMD5Strings[index];
@@ -873,7 +874,7 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
                         _componentType: 'requestsRecords',
                         status: 'success',
                         statusCode: req.goodResps[respIndex].statusCode+'',
-                        requestDetail: req.goodResps[respIndex].referer + req['URL']
+                        requestDetail: req.goodResps[respIndex].referer + req['URL'].replace('/','')
                     }
                 ]),
                 metrics: {
@@ -881,9 +882,11 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
                 }
     
             };
-            if (this.isicp) {
-                oneMetric.tags.podName = k8sutil.getPodName();
-                oneMetric.tags.containerId = k8sutil.getContainerID();
+            if (global.podName) {
+                oneMetric.tags.podName = global.podName;
+            }
+            if (global.containerId) {
+                oneMetric.tags.containerId = 'docker://' + global.containerId;
             }
             requestsRecordsPayload.push(oneMetric);
         }
@@ -899,7 +902,7 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
                         _componentType: 'requestsRecords',
                         status: 'fail',
                         statusCode: req.badResps[respIndex].statusCode+'',
-                        requestDetail: req.badResps[respIndex].referer + req['URL']
+                        requestDetail: req.badResps[respIndex].referer + req['URL'].replace('/','')
                     }
                 ]),
                 metrics: {
@@ -907,9 +910,11 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
                 }
     
             };
-            if (this.isicp) {
-                badMetric.tags.podName = k8sutil.getPodName();
-                badMetric.tags.containerId = k8sutil.getContainerID();
+            if (global.podName) {
+                badMetric.tags.podName = global.podName;
+            }
+            if (global.containerId) {
+                badMetric.tags.containerId = 'docker://' + global.containerId;
             }
             requestsRecordsPayload.push(badMetric);
         }
