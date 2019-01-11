@@ -12,15 +12,15 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-#FROM node:8.9-alpine
-FROM ubuntu:latest
+FROM node:8.9-alpine
+#FROM ubuntu:latest
 # Create app directory
 RUN mkdir -p /usr/src/app
 WORKDIR /usr/src/app
 
 # Install app dependencies
-#RUN apk update && apk upgrade && apk add --no-cache git
-RUN apt-get update && apt-get install -y nodejs && apt-get install -y npm 
+RUN apk update && apk upgrade && apk add --no-cache git && apk add --no-cache libc6-compat
+#RUN apt-get update && apt-get install -y nodejs && apt-get install -y npm 
 
 COPY . /usr/src/app/
 RUN npm install ./ibmapm
