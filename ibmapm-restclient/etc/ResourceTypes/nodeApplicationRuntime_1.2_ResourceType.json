@@ -259,11 +259,29 @@
                         "name": "Status Code",
                         "description": "The response status code of the request."
                     },
-                    "requestMethod": {
+                    "requestType": {
                         "dataType": "string",
                         "displaylabel": "Request Method",
                         "name": "Request Method",
                         "description": "The method of the request (e.g. POST, GET, DELETE, ...)."
+                    },
+                    "requestDetail": {
+                        "dataType": "string",
+                        "displaylabel": "Request Detail",
+                        "name": "Request Detail",
+                        "description": "The full url of the request (e.g. http://x.x.x.x:xxxx/abc.)."
+                    },
+                    "podName":{
+                        "dataType": "string",
+                        "displaylabel": "Pod Name",
+                        "name": "Pod Name",
+                        "description": "The pod name of the application."
+                    },
+                    "containerId":{
+                        "dataType": "string",
+                        "displaylabel": "Container ID",
+                        "name": "Container ID",
+                        "description": "The container id of the application."
                     }
                 }
             }
