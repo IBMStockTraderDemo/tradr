@@ -45,7 +45,8 @@
         "type": "git",
         "url": "git@github.com:IBM/node-ibmapm-restclient.git"
     },
-    "contributors": [{
+    "contributors": [
+        {
             "name": "Hui Jun Song",
             "email": "songhj@cn.ibm.com"
         },

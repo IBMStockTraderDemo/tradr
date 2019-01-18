@@ -20,8 +20,14 @@ function HttpRequest(req, responseTime) {
         statusCode: req.statusCode
     };
 
-    if (req.requestHeader) {
-        responseJson.referer = req.requestHeader.referer ? req.requestHeader.referer : 'http://' + req.requestHeader.host + '/';
+    if (req.requestHeader && req.requestHeader.host) {
+        var protocol = 'http';
+        if (req.header && req.header.indexOf('HTTPS') >= 0) {
+            protocol = 'https';
+        }
+        responseJson.url_prefix = protocol + '://' + req.requestHeader.host;
+    } else {
+        responseJson.url_prefix = '';
     }
 
     if (req.statusCode >= 400) {
@@ -30,7 +36,7 @@ function HttpRequest(req, responseTime) {
     } else {
         this.goodResps.push(responseJson);
     }
-    
+
     this.errorRate = this.errorCount / this.hitCount;
 }
 
@@ -47,8 +53,14 @@ HttpRequest.prototype.updateResponseTime = function updateResponseTime(req, resp
         statusCode: req.statusCode
     };
 
-    if (req.requestHeader) {
-        responseJson.referer = req.requestHeader.referer ? req.requestHeader.referer : 'http://' + req.requestHeader.host + '/';
+    if (req.requestHeader && req.requestHeader.host) {
+        var protocol = 'http';
+        if (req.header && req.header.indexOf('HTTPS') >= 0) {
+            protocol = 'https';
+        }
+        responseJson.url_prefix = protocol + '://' + req.requestHeader.host;
+    } else {
+        responseJson.url_prefix = '';
     }
 
     if (req.statusCode >= 400) {

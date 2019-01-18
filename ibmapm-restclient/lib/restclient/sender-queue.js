@@ -388,7 +388,7 @@ SenderQueue.prototype.addTask = function(task) {
             queues[this.name].consumeAMUI();
         }
     } else if (task.type &&
-        (task.type.indexOf('dcconfig:') === 0 || task.type.indexOf('situation:') === 0 
+        (task.type.indexOf('dcconfig:') === 0 || task.type.indexOf('situation:') === 0
             || task.type.indexOf('rteNotify:') === 0)) {
         if (pluginconfig.amsconsumers.length === 0) {
             logger.debug('No consumers on ams queue. give up the payload!');

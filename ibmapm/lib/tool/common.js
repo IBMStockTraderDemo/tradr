@@ -251,23 +251,6 @@ exports.tlsFix8 = function(options) {
     }
 };
 
-exports.getPercentile = function(responseTimeArray) {
-    if (responseTimeArray.length === 0) {
-        return {
-            percentile_50th: 0,
-            percentile_90th: 0,
-            percentile_95th: 0
-        };
-    }
-    var sorted = responseTimeArray.sort(function(a,b){return a.resp-b.resp;});
-    var count = sorted.length;
-    var position_50th = Math.floor(count * 0.5);
-    var position_90th = Math.floor(count * 0.9) ;
-    var position_95th = Math.floor(count * 0.95);
-
-    return {
-        percentile_50th: sorted[position_50th].resp,
-        percentile_90th: sorted[position_90th].resp,
-        percentile_95th: sorted[position_95th].resp
-    };
-}
+exports.uid = function(namespace, podName, containerName, resourceType) {
+    return 'NodeDC_' + namespace + '_k8sContainer_' + podName + '_' + containerName + '_' + resourceType;
+};

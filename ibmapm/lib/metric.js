@@ -1103,7 +1103,6 @@ Metric.prototype.getJSONHttpReq = function getJSONHttpReq() {
             jsonDataArray.push(jsonRequestData);
         }
     }
-    
     return jsonDataArray;
 };
 
