@@ -108,10 +108,9 @@ JsonSender.prototype.register = function register() { // Register DC and Resouce
     } else if (_this.isicp) {
         _this.applicationName = _this.applicationName || k8sutil.getNamespace() +
             k8sutil.getPodName() + path;
-
         _this.instanceString = k8sutil.getNamespace() + k8sutil.getContainerID() + path;
-        _this.nodeAppRuntimeString = k8sutil.getNamespace() + k8sutil.getContainerID() +
-            'nodeapplicationruntime';
+        _this.nodeAppRuntimeString = commonTools.uid(k8sutil.getNamespace(), k8sutil.getPodName(),
+            k8sutil.getContainerName(), 'nodeApplicationRuntime');
         _this.serviceNames = k8sutil.getFullServiceName();
         _this.serviceIds = k8sutil.getServiceID();
     } else {
@@ -216,7 +215,8 @@ JsonSender.prototype.registerDC = function registerDC() {
                     }
                     if (queryProviderRetry >= 240) {
                         clearInterval(queryProviderInterval);
-                        logger.error('Failed to get provider 100 seconds after registered, please contact your server admin.');
+                        logger.error('Failed to get provider 100 seconds after registered,' +
+                            ' please contact your server admin.');
                     }
                     getDCres.on('data', function(d) {
                         var providerString = d.toString();
@@ -233,7 +233,8 @@ JsonSender.prototype.registerDC = function registerDC() {
                                             restClient.getConfiguration(function(geterr, getres) {
                                                 if (geterr) { return; }
                                                 if (getres && getres.headers && getres.headers['last-modified'] &&
-                                                    getres.headers['last-modified'] !== global.KNJ_CONFIG_LASTMODIFIED) {
+                                                    getres.headers['last-modified'] !== global.KNJ_CONFIG_LASTMODIFIED
+                                                    ) {
                                                     global.KNJ_CONFIG_LASTMODIFIED = getres.headers['last-modified'];
                                                     getres.on('data', function(d) {
                                                         var configuration = d.toString();
@@ -316,7 +317,9 @@ function dealwithConfigurationChange(conf) {
             }
             dcConfig.update(curr);
         }
-        if (!process.env.KNJ_LOG_LEVEL || process.env.KNJ_LOG_LEVEL.toUpperCase() !== conf.configuration.properties.TRACE_LEVEL.value.toUpperCase()) {
+        if (!process.env.KNJ_LOG_LEVEL ||
+                process.env.KNJ_LOG_LEVEL.toUpperCase() !==
+                    conf.configuration.properties.TRACE_LEVEL.value.toUpperCase()) {
             logger.info('Loglevel Configuration Changed',
                 conf.configuration.properties.TRACE_LEVEL.value);
             process.env.KNJ_LOG_LEVEL = conf.configuration.properties.TRACE_LEVEL.value.toUpperCase();
@@ -453,7 +456,8 @@ JsonSender.prototype.registerAppModel = function registerAppModel() {
 JsonSender.prototype.registerAppRuntime = function registerAppRuntime() {
     logger.debug('json-sender.js', 'registerAppRuntime', 'start');
     const runtimeObj = {
-        id: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ? process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+        id: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
+            process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
         type: ['nodeApplicationRuntime'],
         references: [],
         properties: {
@@ -527,7 +531,8 @@ JsonSender.prototype.registerAppModelOnPre = function registerAppModelOnPre(reqD
 JsonSender.prototype.registerAppRuntimeOnPre = function registerAppRuntimeOnPre() {
     logger.debug('json-sender.js', 'registerAppRuntimeOnPre', 'start');
     const runtimeObj = {
-        id: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ? process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+        id: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
+            process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
         type: ['nodeApplicationRuntime'],
         references: [],
         properties: {
@@ -572,9 +577,11 @@ JsonSender.prototype.registerAppModelOnICP = function registerAppModelOnICP() {
                 name: this.applicationName,
                 namespace: k8sutil.getNamespace(),
                 connections: svc.connections,
+                mergeTokens: svc.mergeTokens.concat([svc.uid]),
                 tags: ['deployment:' + getDeployment(), 'serviceEndpoint']
             }
         };
+        
         if (svc.nodePort.length > 0) {
             interfaceObj.properties.connections = interfaceObj.properties.connections.concat(
                 commonTools.combineArr(k8sutil.getNodeIPs(), ':', svc.nodePort));
@@ -589,8 +596,12 @@ JsonSender.prototype.registerAppModelOnICP = function registerAppModelOnICP() {
 
 JsonSender.prototype.registerAppRuntimeOnICP = function registerAppRuntimeOnICP() {
     logger.debug('json-sender.js', 'registerAppRuntimeOnICP', 'start');
+    if (!k8sutil.getContainerName() || !k8sutil.getContainerFullID()) {
+        return;
+    }
     const runtimeObj = {
-        id: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ? process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+        id: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
+            process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
         type: ['nodeApplicationRuntime'],
         references: [],
         properties: {
@@ -625,6 +636,9 @@ JsonSender.prototype.registerAppRuntimeOnICP = function registerAppRuntimeOnICP(
     if (k8sutil.getPodName()) {
         global.podName = k8sutil.getPodName();
         runtimeObj.properties.podName = global.podName;
+    }
+    if (k8sutil.getPodID()) {
+        global.podId = k8sutil.getPodID();
     }
     for (let index = 0; index < this.serviceEndPointMD5Strings.length; index++) {
         const element = this.serviceEndPointMD5Strings[index];
@@ -682,14 +696,25 @@ JsonSender.prototype.send = function send(data) {
     var metricPayloads = [];
     var dimensions_content = {};
     if (this.isicp) {
-        for (var i = 0, len = this.serviceNames.length; i < len; i++) {
-            dimensions_content[this.serviceNames[i]] = 'serviceIds';
-        }
         if (this.serviceNames.length <= 0) {
             this.serviceNames = k8sutil.getFullServiceName();
         }
+        for (var i = 0, len = this.serviceNames.length; i < len; i++) {
+            dimensions_content[this.serviceNames[i]] = 'serviceIds';
+        }
+        if (this.serviceNames.length >= 0) {
+            dimensions_content['serviceName'] = this.serviceNames[0];
+        }
+        if (global.podId) {
+            dimensions_content['podId'] = global.podId;
+        }
+        if (global.podName) {
+            dimensions_content['podName'] = global.podName;
+        }
+        if (global.containerId) {
+            dimensions_content['containerId'] = 'docker://' + global.containerId;
+        }
     }
-
     // special code for feature ut end
 
     var reqSummPayload = this.genReqSumm(dimensions_content, data);
@@ -699,11 +724,12 @@ JsonSender.prototype.send = function send(data) {
         this.genRequestSummaries(dimensions_content, data);
     metricPayloads = metricPayloads.concat(reqsSummPayload.summary);
     metricPayloads = metricPayloads.concat(reqsSummPayload.record);
-
+    metricPayloads = metricPayloads.concat(reqsSummPayload.errorCount);
     if (this.nodeAppRuntimeMD5String) {
 
         var enginePayloadMeta = {
-            resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ? process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+            resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
+                process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
             timestamp: new Date().toISOString()
         };
         var gcPayload = this.genGCPayload(dimensions_content,
@@ -820,7 +846,8 @@ JsonSender.prototype.genGCPayload = function genGCPayload(dimensions_content,
 };
 JsonSender.prototype.genReqSumm = function genReqSumm(dimensions_content, data) {
     var requestSummary = {
-        resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ? process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+        resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
+            process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
         tags: commonTools.merge([dimensions_content,
             { _componentType: 'requestSummary' }
         ]),
@@ -840,10 +867,12 @@ JsonSender.prototype.genReqSumm = function genReqSumm(dimensions_content, data) 
 JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensions_content, data) {
     var requestsSummaryPayload = [];
     var requestsRecordsPayload = [];
+    var errorCountPayload = [];
     for (var index = 0; data.httpReq && index < data.httpReq.length; index++) {
         var req = data.httpReq[index];
         requestsSummaryPayload.push({
-            resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ? process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+            resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
+                process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
             timestamp: new Date().toISOString(),
             tags: commonTools.merge([dimensions_content,
                 {
@@ -862,64 +891,90 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
                 errorRate: req['ERROR_RATE']
             }
         });
-        for(var respIndex = 0; respIndex < req.goodResps.length; respIndex++){
+        for (let respIndex = 0; respIndex < req.goodResps.length; respIndex++){
             var oneMetric = {
-                resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ? process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+                resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
+                    process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
                 timestamp: (new Date(req.goodResps[respIndex].timestamp)).toISOString(),
                 tags: commonTools.merge([dimensions_content,
                     {
                         applicationName: this.applicationName,
                         requestName: req['URL'],
                         requestType: req['METHOD'],
-                        _componentType: 'requestsRecords',
+                        _componentType: 'requestMetrics',
                         status: 'success',
-                        statusCode: req.goodResps[respIndex].statusCode+'',
-                        requestDetail: req.goodResps[respIndex].referer + req['URL'].replace('/','')
+                        statusCode: req.goodResps[respIndex].statusCode + '',
+                        requestDetail: req.goodResps[respIndex].url_prefix + req['URL']
                     }
                 ]),
                 metrics: {
                     requestResponseTime: req.goodResps[respIndex].resp
                 }
-    
             };
-            if (global.podName) {
-                oneMetric.tags.podName = global.podName;
-            }
-            if (global.containerId) {
-                oneMetric.tags.containerId = 'docker://' + global.containerId;
-            }
             requestsRecordsPayload.push(oneMetric);
         }
-        for(var respIndex = 0; respIndex < req.badResps.length; respIndex++){
+        var requestErrorCounts = {};
+        for (let respIndex = 0; respIndex < req.badResps.length; respIndex++){
             var badMetric = {
-                resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ? process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+                resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
+                    process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
                 timestamp: (new Date(req.badResps[respIndex].timestamp)).toISOString(),
                 tags: commonTools.merge([dimensions_content,
                     {
                         applicationName: this.applicationName,
                         requestName: req['URL'],
                         requestType: req['METHOD'],
-                        _componentType: 'requestsRecords',
+                        _componentType: 'requestMetrics',
                         status: 'fail',
-                        statusCode: req.badResps[respIndex].statusCode+'',
-                        requestDetail: req.badResps[respIndex].referer + req['URL'].replace('/','')
+                        statusCode: req.badResps[respIndex].statusCode + '',
+                        requestDetail: req.badResps[respIndex].url_prefix + req['URL']
                     }
                 ]),
                 metrics: {
                     requestResponseTime: req.badResps[respIndex].resp
                 }
-    
             };
-            if (global.podName) {
-                badMetric.tags.podName = global.podName;
-            }
-            if (global.containerId) {
-                badMetric.tags.containerId = 'docker://' + global.containerId;
-            }
             requestsRecordsPayload.push(badMetric);
+            var requestErrorCountsKey = badMetric.tags.requestName + '|' + badMetric.tags.requestType;
+            if (req.badResps[respIndex].statusCode >= 400 && req.badResps[respIndex].statusCode < 500){
+                requestErrorCountsKey += ('|4xx');
+            } else {
+                requestErrorCountsKey += ('|5xx');
+            }
+            if (!requestErrorCounts[requestErrorCountsKey]) {
+                requestErrorCounts[requestErrorCountsKey] = {
+                    errorCount: 1,
+                    requestDetail: badMetric.tags.requestDetail
+                };
+            } else {
+                requestErrorCounts[requestErrorCountsKey].errorCount += 1;
+            }
+        }
+
+        for (var key in requestErrorCounts) {
+            var errorCount = requestErrorCounts[key].errorCount;
+            var keyDetails = key.split('|');
+            requestsRecordsPayload.push({
+                resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
+                    process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+                timestamp: (new Date()).toISOString(),
+                tags: commonTools.merge([dimensions_content,
+                    {
+                        applicationName: this.applicationName,
+                        requestName: keyDetails[0],
+                        requestType: keyDetails[1],
+                        _componentType: 'errorMetrics',
+                        errorCode: keyDetails[2],
+                        requestDetail: requestErrorCounts[key].requestDetail
+                    }
+                ]),
+                metrics: {
+                    errorCount: errorCount
+                }
+            });
         }
     }
-    return {summary: requestsSummaryPayload, record: requestsRecordsPayload};
+    return {summary: requestsSummaryPayload, record: requestsRecordsPayload, errorCount: errorCountPayload};
 
 };
 
@@ -977,7 +1032,8 @@ JsonSender.prototype.sendAAR = function(req_inst) {
                 documentType: '/AAR/Middleware/NODEJS',
                 softwareServerType: 'http://open-services.net/ns/crtv#NodeJS',
                 softwareModuleName: this.applicationName,
-                resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ? process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+                resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
+                        process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
                 processID: process.pid,
                 diagnosticsEnabled: commonTools.testTrue(process.env.KNJ_ENABLE_DEEPDIVE),
                 applicationName: this.applicationName,
