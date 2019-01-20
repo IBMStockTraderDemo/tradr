@@ -480,7 +480,8 @@ K8sutil.prototype.getFullServiceName = function getFullServiceName() {
     }
     for (let index = 0; index < svcArray.length; index++) {
         let svcitem = svcArray[index];
-        svcFullNames.push(namespace + '_service_' + svcitem.metadata.name);
+        //svcFullNames.push(namespace + '_service_' + svcitem.metadata.name);
+        svcFullNames.push(svcitem.metadata.name);
     }
     logger.debug('k8sutil.js', 'getFullServiceName', 'The full service names:', svcFullNames);
     return svcFullNames;
