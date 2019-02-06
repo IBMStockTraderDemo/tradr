@@ -86,7 +86,7 @@ SenderQueue.prototype.send = function(task, quequeName) {
         hostname: urlMap.hostname,
         host: urlMap.host,
         path: urlMap.path,
-        method: task.GET ? 'GET' : 'POST',
+        method: task.GET ? 'GET' : (task.PUT ? 'PUT' : 'POST'),
         agent: keepAliveAgentHttp,
         port: urlMap.port,
         rejectUnauthorized: false,
@@ -118,13 +118,13 @@ SenderQueue.prototype.send = function(task, quequeName) {
             logger.debug('Get from ' + task.url, ' ; header: ',
                 JSON.stringify(options.headers));
         } else {
-            logger.debug('Post payload to ', task.url, ' ; header: ',
+            logger.debug((task.PUT ? 'Put' : 'Post') + ' payload to ', task.url, ' ; header: ',
                 JSON.stringify(options.headers), ' ; payload: ', payloadString);
         }
     }
 
     if (task.type.indexOf('resources: ') === 0 || task.type.indexOf('dc:') === 0 ||
-        task.type.indexOf('dcconfig: ') === 0) {
+        task.type.indexOf('dcconfig: ') === 0 || task.type.indexOf('updateResources: ') === 0) {
 
         if (!resourceRegistryDumper) {
             resourceRegistryDumper = require('../plugins/logutil').getResourceRegisterDumper();
@@ -133,7 +133,7 @@ SenderQueue.prototype.send = function(task, quequeName) {
             resourceRegistryDumper.info('Get from ' + task.url + ' ; header: ' +
                 JSON.stringify(options.headers) + ' ;');
         } else {
-            resourceRegistryDumper.info('Post payload to ' + task.url + ' ; header: ' +
+            resourceRegistryDumper.info((task.PUT ? 'Put' : 'Post') + ' payload to ' + task.url + ' ; header: ' +
                 JSON.stringify(options.headers) + ' ; payload: ' + payloadString);
         }
     }
@@ -289,7 +289,7 @@ SenderQueue.prototype.addTask = function(task) {
             queues[this.name].consumeDC();
         }
 
-    } else if (task.type && task.type.indexOf('resources:') === 0) {
+    } else if (task.type && (task.type.indexOf('resources:') === 0 || task.type.indexOf('updateResources:') === 0)) {
         if (pluginconfig.resourceconsumers.length === 0) {
             logger.debug('No consumers on resource queue. give up the payload!');
             return; // no one monitor resource queue, give up the payload directly

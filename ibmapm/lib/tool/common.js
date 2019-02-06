@@ -251,6 +251,10 @@ exports.tlsFix8 = function(options) {
     }
 };
 
-exports.uid = function(namespace, podName, containerName, resourceType) {
-    return 'NodeDC_' + namespace + '_k8sContainer_' + podName + '_' + containerName + '_' + resourceType;
+exports.uid_po = function(namespace, podName, containerName, resourceType) {
+    return 'NodejsDC_' + namespace + '_' + resourceType + '_' + podName + '_' + containerName;
+};
+
+exports.uid_service = function(namespace, resourceType, servicename) {
+    return 'NodejsDC_' + namespace + '_' + resourceType + '_' + servicename;
 };

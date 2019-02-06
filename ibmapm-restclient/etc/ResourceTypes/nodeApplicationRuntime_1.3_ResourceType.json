@@ -326,18 +326,6 @@
                         "name": "Request Detail",
                         "description": "The full url of the request (e.g. http://x.x.x.x:xxxx/abc.)."
                     },
-                    "podName":{
-                        "dataType": "string",
-                        "displaylabel": "Pod Name",
-                        "name": "Pod Name",
-                        "description": "The pod name of the application."
-                    },
-                    "containerId":{
-                        "dataType": "string",
-                        "displaylabel": "Container ID",
-                        "name": "Container ID",
-                        "description": "The container id of the application."
-                    },
                     "serviceName":{
                         "dataType": "string",
                         "displaylabel": "Service Name",
@@ -399,17 +387,11 @@
                         "name": "Request Detail",
                         "description": "The full url of the request (e.g. http://x.x.x.x:xxxx/abc.)."
                     },
-                    "podName":{
+                    "nameSpace": {
                         "dataType": "string",
-                        "displaylabel": "Pod Name",
-                        "name": "Pod Name",
-                        "description": "The pod name of the application."
-                    },
-                    "containerId":{
-                        "dataType": "string",
-                        "displaylabel": "Container ID",
-                        "name": "Container ID",
-                        "description": "The container id of the application."
+                        "displaylabel": "Name Space",
+                        "name": "Name Space",
+                        "description": "Name Space"
                     },
                     "serviceName":{
                         "dataType": "string",
@@ -1073,10 +1055,10 @@
     "name": "Node Application Runtime",
     "description": "Node Application Runtime",
     "entityTypes": ["nodeApplicationRuntime"],
-    "metadataVersion": "1.2",
-    "keyIndexName": "metadata//1.2/resourcetypes/resourcetype/nodeApplicationRuntime",
+    "metadataVersion": "1.3",
+    "keyIndexName": "metadata//1.3/resourcetypes/resourcetype/nodeApplicationRuntime",
     "tags": ["metadata",
         "topLevelResource", "deployment:container"
     ],
-    "timestamp": "2018-09-25T13:32:53.125+08:00"
+    "timestamp": "2019-01-25T13:32:53.125+08:00"
 }

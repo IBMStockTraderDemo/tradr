@@ -271,6 +271,38 @@ module.exports.registerResource = function(obj, callback) {
     });
 };
 
+module.exports.updateResource = function(obj, loc, callback){
+    logger.debug('update Resource ', obj);
+    if (!obj.type || !obj.id || !obj.properties || !loc) {
+        logger.error('updateResource payload is not complete, must have: ' +
+            'location, id, type and properties');
+        return;
+    }
+    if (!queue) {
+        queue = sender.getQueue('bam');
+    }
+    var payload = { // merge public attributes
+        entityTypes: obj.type,
+        deployment: obj.deployment
+    };
+    if (obj.VersionDependencies) {
+        payload['VersionDependencies'] = obj.VersionDependencies;
+    }
+    if (obj.references && obj.references.length > 0) {
+        payload['_references'] = genRef(obj.references);
+    }
+    for (var prop in obj.properties) { // merge properties
+        payload[prop] = obj.properties[prop];
+    }
+
+    queue.addTask({
+        location: loc,
+        payload: payload,
+        callback: callback,
+        type: 'updateResources: ' + payload.entityTypes
+    });
+};
+
 module.exports.postDCConfiguration = function(payload, type, callback) {
     queue.addTask({
         payload: payload,

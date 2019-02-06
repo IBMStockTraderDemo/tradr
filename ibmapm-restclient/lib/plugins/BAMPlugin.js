@@ -39,14 +39,17 @@ var ready_event = new EventEmitter();
 var initialized = false;
 var WF_SVCS_CONN = {
     RESOURCEMGMT_SERVICE_BASE_PATH: process.env.RESOURCEMGMT_SERVICE_BASE_PATH ?
-        rcutil.decBase64Ex(process.env.RESOURCEMGMT_SERVICE_BASE_PATH) : pluginConfig.globalEnv.RESOURCEMGMT_SERVICE_BASE_PATH ||
-        '/applicationmgmt/0.9',
+        rcutil.decBase64Ex(process.env.RESOURCEMGMT_SERVICE_BASE_PATH) :
+        pluginConfig.globalEnv.RESOURCEMGMT_SERVICE_BASE_PATH || '/applicationmgmt/0.9',
     METRICS_SERVICE_BASE_PATH: process.env.METRICS_SERVICE_BASE_PATH ?
-        rcutil.decBase64Ex(process.env.METRICS_SERVICE_BASE_PATH) : pluginConfig.globalEnv.METRICS_SERVICE_BASE_PATH || '/metric/1.0',
+        rcutil.decBase64Ex(process.env.METRICS_SERVICE_BASE_PATH) :
+        pluginConfig.globalEnv.METRICS_SERVICE_BASE_PATH || '/metric/1.0',
     UI_SERVICE_BASE_PATH: process.env.UI_SERVICE_BASE_PATH ?
-        rcutil.decBase64Ex(process.env.UI_SERVICE_BASE_PATH) : pluginConfig.globalEnv.UI_SERVICE_BASE_PATH || '/uielement/0.8',
+        rcutil.decBase64Ex(process.env.UI_SERVICE_BASE_PATH) :
+        pluginConfig.globalEnv.UI_SERVICE_BASE_PATH || '/uielement/0.8',
     AGENTMGMT_SERVICE_BASE_PATH: process.env.AGENTMGMT_SERVICE_BASE_PATH ?
-        rcutil.decBase64Ex(process.env.AGENTMGMT_SERVICE_BASE_PATH) : pluginConfig.globalEnv.AGENTMGMT_SERVICE_BASE_PATH || '/agent_mgmt/0.6'
+        rcutil.decBase64Ex(process.env.AGENTMGMT_SERVICE_BASE_PATH) :
+        pluginConfig.globalEnv.AGENTMGMT_SERVICE_BASE_PATH || '/agent_mgmt/0.6'
 };
 
 /* function concatTask(tasks) {
@@ -176,13 +179,20 @@ function sendOne(task) {
         if (task.type.indexOf('resources:') === 0) {
             task.url = wf_url + WF_SVCS_CONN.RESOURCEMGMT_SERVICE_BASE_PATH + '/resources';
         }
+
+        if (task.type.indexOf('updateResources:') === 0) {
+            task.url = wf_url + task.location;
+            task.PUT = true;
+        }
+
         if (task.type && task.type.indexOf('metadata:') === 0) {
             task.url = wf_url + WF_SVCS_CONN.RESOURCEMGMT_SERVICE_BASE_PATH + '/metadata';
         }
 
         if (task.type && task.type.indexOf('amui:') === 0) {
             task.url = wf_url +
-                WF_SVCS_CONN.AGENTMGMT_SERVICE_BASE_PATH + '/providers/uiconfiguration/bulk' + '?version=' + global.DC_VERSION;
+                WF_SVCS_CONN.AGENTMGMT_SERVICE_BASE_PATH +
+                '/providers/uiconfiguration/bulk' + '?version=' + global.DC_VERSION;
             if (!(task.payload instanceof Buffer)) {
                 task.payload = Buffer.from(task.payload);
             }
@@ -251,6 +261,10 @@ function addQueue(task) {
             let element = bamconns[key];
             if (task.type.indexOf('resources:') === 0) {
                 task.url = element.rms_resource_url;
+            }
+            if (task.type.indexOf('updateResources:') === 0) {
+                task.url = element.server_url + task.location;
+                task.PUT = true;
             }
             if (task.type && task.type.indexOf('metadata:') === 0) {
                 task.url = element.rms_metadata_url;
@@ -756,7 +770,7 @@ function sendMetadata() {
     try {
 
         let mdruntime =
-            require('../../etc/ResourceTypes/nodeApplicationRuntime_1.2_ResourceType.json');
+            require('../../etc/ResourceTypes/nodeApplicationRuntime_1.3_ResourceType.json');
         taskb['payload'] = JSON.stringify(mdruntime);
         queue.addTask(taskb);
 

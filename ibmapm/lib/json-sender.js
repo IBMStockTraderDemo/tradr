@@ -40,7 +40,6 @@ function JsonSender() {
     this.nodeAppRuntimeString = undefined;
     this.nodeAppRuntimeMD5String = undefined;
     this.interfaceMD5String = undefined;
-    this.serviceEndPointMD5Strings = [];
     this.instanceString = undefined;
     this.isServiceEndPointReady = false;
     this.externalRegister = {};
@@ -109,9 +108,9 @@ JsonSender.prototype.register = function register() { // Register DC and Resouce
         _this.applicationName = _this.applicationName || k8sutil.getNamespace() +
             k8sutil.getPodName() + path;
         _this.instanceString = k8sutil.getNamespace() + k8sutil.getContainerID() + path;
-        _this.nodeAppRuntimeString = commonTools.uid(k8sutil.getNamespace(), k8sutil.getPodName(),
+        _this.nodeAppRuntimeString = commonTools.uid_po(k8sutil.getNamespace(), k8sutil.getPodName(),
             k8sutil.getContainerName(), 'nodeApplicationRuntime');
-        _this.serviceNames = k8sutil.getFullServiceName();
+        _this.serviceNames = k8sutil.getServiceName();
         _this.serviceIds = k8sutil.getServiceID();
     } else {
         _this.applicationName = _this.applicationName || process.argv[1];
@@ -196,10 +195,10 @@ JsonSender.prototype.registerDC = function registerDC() {
 
 
     dcObj.references = [
-        { direction: 'to', type: 'monitors', id: this.nodeAppRuntimeMD5String }
+        { direction: 'to', type: 'monitors', id: this.isicp ? this.nodeAppRuntimeString : this.nodeAppRuntimeMD5String }
     ];
-    for (let index = 0; index < this.serviceEndPointMD5Strings.length; index++) {
-        const element = this.serviceEndPointMD5Strings[index];
+    for (let index = 0; index < serviceEndPointResIDs.length; index++) {
+        const element = serviceEndPointResIDs[index];
         dcObj.references.push({ direction: 'to', type: 'monitors', id: element });
     }
 
@@ -234,7 +233,7 @@ JsonSender.prototype.registerDC = function registerDC() {
                                                 if (geterr) { return; }
                                                 if (getres && getres.headers && getres.headers['last-modified'] &&
                                                     getres.headers['last-modified'] !== global.KNJ_CONFIG_LASTMODIFIED
-                                                    ) {
+                                                ) {
                                                     global.KNJ_CONFIG_LASTMODIFIED = getres.headers['last-modified'];
                                                     getres.on('data', function(d) {
                                                         var configuration = d.toString();
@@ -318,8 +317,8 @@ function dealwithConfigurationChange(conf) {
             dcConfig.update(curr);
         }
         if (!process.env.KNJ_LOG_LEVEL ||
-                process.env.KNJ_LOG_LEVEL.toUpperCase() !==
-                    conf.configuration.properties.TRACE_LEVEL.value.toUpperCase()) {
+            process.env.KNJ_LOG_LEVEL.toUpperCase() !==
+            conf.configuration.properties.TRACE_LEVEL.value.toUpperCase()) {
             logger.info('Loglevel Configuration Changed',
                 conf.configuration.properties.TRACE_LEVEL.value);
             process.env.KNJ_LOG_LEVEL = conf.configuration.properties.TRACE_LEVEL.value.toUpperCase();
@@ -346,9 +345,10 @@ JsonSender.prototype.init = function init(envType) {
         var vcapApplication;
         if (process.env.VCAP_APPLICATION) {
             vcapApplication = JSON.parse(process.env.VCAP_APPLICATION);
+            this.applicationName = this.applicationName || vcapApplication['application_name'];
 
             _this.app_data = {
-                APP_NAME: this.applicationName || vcapApplication['application_name'],
+                APP_NAME: this.applicationName,
                 INSTANCE_ID: vcapApplication['instance_id'],
                 INSTANCE_INDEX: vcapApplication['instance_index'],
                 URI: vcapApplication['uris'],
@@ -436,7 +436,6 @@ JsonSender.prototype.registerAppModel = function registerAppModel() {
             var uri = this.vcap.application_uris[index];
             var interfaceMD5String = crypto.createHash('MD5').update(uri + ':' + this.vcap.port)
                 .digest('hex');
-            this.serviceEndPointMD5Strings.push(interfaceMD5String);
             var interfaceObj = {
                 id: process.env.KNJ_SERVICEENDPOINTS_ID ? process.env.KNJ_SERVICEENDPOINTS_ID : interfaceMD5String,
                 type: ['serviceEndpoint'],
@@ -447,13 +446,18 @@ JsonSender.prototype.registerAppModel = function registerAppModel() {
                 }
             };
             serviceEndPointResIDs.push(interfaceObj.id);
-            restClient.registerResource(interfaceObj);
+            restClient.registerResource(interfaceObj, function(err, res){
+                if (err) { return; }
+                if (res.statusCode === 409) {
+                    restClient.updateResource(interfaceObj, res.headers.location);
+                }
+            });
         }
         this.registerDC();
-        this.registerAppRuntime();
+        this.registerAppRuntime(interfaceObj.properties.port);
     }
 };
-JsonSender.prototype.registerAppRuntime = function registerAppRuntime() {
+JsonSender.prototype.registerAppRuntime = function registerAppRuntime(urlPort) {
     logger.debug('json-sender.js', 'registerAppRuntime', 'start');
     const runtimeObj = {
         id: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
@@ -462,7 +466,11 @@ JsonSender.prototype.registerAppRuntime = function registerAppRuntime() {
         references: [],
         properties: {
             name: this.applicationName,
+            applicationName: this.applicationName,
+            host: os.hostname(),
+            ip: this.IP,
             tags: ['deployment:' + getDeployment(), 'serviceInstance'],
+            port: urlPort,
             VersionDependencies: {
                 version: process.versions.node,
                 http_parser: process.versions.http_parser,
@@ -476,8 +484,8 @@ JsonSender.prototype.registerAppRuntime = function registerAppRuntime() {
         }
 
     };
-    for (let index = 0; index < this.serviceEndPointMD5Strings.length; index++) {
-        const element = this.serviceEndPointMD5Strings[index];
+    for (let index = 0; index < serviceEndPointResIDs.length; index++) {
+        const element = serviceEndPointResIDs[index];
         runtimeObj.references.push({ direction: 'from', type: 'communicatesWith', id: element });
     }
     restClient.registerResource(runtimeObj, function(err, res) {
@@ -485,6 +493,9 @@ JsonSender.prototype.registerAppRuntime = function registerAppRuntime() {
         if (res && ((res.statusCode >= 200 && res.statusCode < 300) || res.statusCode === 409)) {
             logger.debug('nodeApplicationRuntime is registered');
             global.nodeApplicationRuntimeIsRegistered = true;
+        }
+        if (res.statusCode === 409) {
+            restClient.updateResource(runtimeObj, res.headers.location);
         }
     });
 };
@@ -510,7 +521,6 @@ JsonSender.prototype.registerAppModelOnPre = function registerAppModelOnPre(reqD
     var interfaceMD5 = crypto.createHash('MD5');
     interfaceMD5.update(uri.protocol + '//' + uri.host);
     this.interfaceMD5String = interfaceMD5.digest('hex');
-    this.serviceEndPointMD5Strings.push(this.interfaceMD5String);
 
     var interfaceObj = {
         id: process.env.KNJ_SERVICEENDPOINTS_ID ? process.env.KNJ_SERVICEENDPOINTS_ID : this.interfaceMD5String,
@@ -523,12 +533,17 @@ JsonSender.prototype.registerAppModelOnPre = function registerAppModelOnPre(reqD
     };
 
     serviceEndPointResIDs.push(interfaceObj.id);
-    restClient.registerResource(interfaceObj);
+    restClient.registerResource(interfaceObj, function(err, res){
+        if (err) { return; }
+        if (res.statusCode === 409) {
+            restClient.updateResource(interfaceObj, res.headers.location);
+        }
+    });
     this.registerDC();
-    this.registerAppRuntimeOnPre();
+    this.registerAppRuntimeOnPre(interfaceObj.properties.port);
 };
 
-JsonSender.prototype.registerAppRuntimeOnPre = function registerAppRuntimeOnPre() {
+JsonSender.prototype.registerAppRuntimeOnPre = function registerAppRuntimeOnPre(urlPort) {
     logger.debug('json-sender.js', 'registerAppRuntimeOnPre', 'start');
     const runtimeObj = {
         id: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
@@ -537,6 +552,10 @@ JsonSender.prototype.registerAppRuntimeOnPre = function registerAppRuntimeOnPre(
         references: [],
         properties: {
             name: this.applicationName,
+            applicationName: this.applicationName,
+            host: os.hostname(),
+            port: urlPort,
+            ip: this.IP,
             tags: ['deployment:' + getDeployment(), 'serviceInstance'],
             VersionDependencies: {
                 version: process.versions.node,
@@ -551,8 +570,8 @@ JsonSender.prototype.registerAppRuntimeOnPre = function registerAppRuntimeOnPre(
         }
 
     };
-    for (let index = 0; index < this.serviceEndPointMD5Strings.length; index++) {
-        const element = this.serviceEndPointMD5Strings[index];
+    for (let index = 0; index < serviceEndPointResIDs.length; index++) {
+        const element = serviceEndPointResIDs[index];
         runtimeObj.references.push({ direction: 'from', type: 'communicatesWith', id: element });
     }
     restClient.registerResource(runtimeObj, function(err, res) {
@@ -561,17 +580,22 @@ JsonSender.prototype.registerAppRuntimeOnPre = function registerAppRuntimeOnPre(
             logger.debug('nodeApplicationRuntime is registered');
             global.nodeApplicationRuntimeIsRegistered = true;
         }
+        if (res.statusCode === 409) {
+            restClient.updateResource(runtimeObj, res.headers.location);
+        }
     });
 };
 JsonSender.prototype.registerAppModelOnICP = function registerAppModelOnICP() {
     logger.debug('json-sender.js', 'registerAppModelOnICP', 'start');
     var svcArr = k8sutil.getServicesConn();
+    var nodePort = [];
+    var nodeIP = [];
     for (var index = 0; index < svcArr.length; index++) {
         var svc = svcArr[index];
-        this.serviceEndPointMD5Strings.push(svc.uid);
-        serviceEndPointResIDs.push(svc.uid);
+        var serviceID = commonTools.uid_service(k8sutil.getNamespace(), 'serviceEndpoint', svc.name);
+        serviceEndPointResIDs.push(serviceID);
         var interfaceObj = {
-            id: process.env.KNJ_SERVICEENDPOINTS_ID ? process.env.KNJ_SERVICEENDPOINTS_ID : svc.uid,
+            id: process.env.KNJ_SERVICEENDPOINTS_ID ? process.env.KNJ_SERVICEENDPOINTS_ID : serviceID,
             type: ['serviceEndpoint'],
             properties: {
                 name: this.applicationName,
@@ -581,31 +605,50 @@ JsonSender.prototype.registerAppModelOnICP = function registerAppModelOnICP() {
                 tags: ['deployment:' + getDeployment(), 'serviceEndpoint']
             }
         };
-        
+
         if (svc.nodePort.length > 0) {
             interfaceObj.properties.connections = interfaceObj.properties.connections.concat(
                 commonTools.combineArr(k8sutil.getNodeIPs(), ':', svc.nodePort));
+            nodePort = svc.nodePort;
         }
-        restClient.registerResource(interfaceObj);
+        for (var conn = 0; interfaceObj.properties.connections
+            && conn < interfaceObj.properties.connections.length; conn++) {
+            var connect = interfaceObj.properties.connections[conn];
+            var ipport = connect.split(':');
+            if (ipport.length === 2) {
+                nodePort.push(ipport[1]);
+                nodeIP.push(ipport[0]);
+            }
+        }
+        restClient.registerResource(interfaceObj, function(err, res){
+            if (err) { return; }
+            if (res.statusCode === 409) {
+                restClient.updateResource(interfaceObj, res.headers.location);
+            }
+        });
     }
 
     this.registerDC();
-    this.registerAppRuntimeOnICP();
+    this.registerAppRuntimeOnICP(Array.from(new Set(nodePort)), Array.from(new Set(nodeIP)));
     global.SERVICEENDPOINT_REGISTED = true;
 };
 
-JsonSender.prototype.registerAppRuntimeOnICP = function registerAppRuntimeOnICP() {
+JsonSender.prototype.registerAppRuntimeOnICP = function registerAppRuntimeOnICP(nodePort, nodeIP) {
     logger.debug('json-sender.js', 'registerAppRuntimeOnICP', 'start');
     if (!k8sutil.getContainerName() || !k8sutil.getContainerFullID()) {
         return;
     }
     const runtimeObj = {
         id: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
-            process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+            process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeString,
         type: ['nodeApplicationRuntime'],
         references: [],
         properties: {
             name: k8sutil.getNamespace() + '.' + k8sutil.getPodName() + '.' + this.applicationName,
+            applicationName: this.applicationName,
+            host: os.hostname(),
+            ip: nodeIP ? nodeIP.join(',') : this.IP,
+            port: nodePort ? nodePort.join(',') : 0,
             tags: ['deployment:' + getDeployment(), 'serviceInstance'],
             namespace: k8sutil.getNamespace(),
             mergeTokens: [
@@ -640,8 +683,8 @@ JsonSender.prototype.registerAppRuntimeOnICP = function registerAppRuntimeOnICP(
     if (k8sutil.getPodID()) {
         global.podId = k8sutil.getPodID();
     }
-    for (let index = 0; index < this.serviceEndPointMD5Strings.length; index++) {
-        const element = this.serviceEndPointMD5Strings[index];
+    for (let index = 0; index < serviceEndPointResIDs.length; index++) {
+        const element = serviceEndPointResIDs[index];
         runtimeObj.references.push({ direction: 'from', type: 'communicatesWith', id: element });
     }
     restClient.registerResource(runtimeObj, function(err, res) {
@@ -649,6 +692,9 @@ JsonSender.prototype.registerAppRuntimeOnICP = function registerAppRuntimeOnICP(
         if (res && ((res.statusCode >= 200 && res.statusCode < 300) || res.statusCode === 409)) {
             logger.debug('nodeApplicationRuntime is registered');
             global.nodeApplicationRuntimeIsRegistered = true;
+        }
+        if (res.statusCode === 409) {
+            restClient.updateResource(runtimeObj, res.headers.location);
         }
     });
 };
@@ -684,7 +730,7 @@ JsonSender.prototype.send = function send(data) {
     this.dynamicRegister();
     if (global.nodeApplicationRuntimeIsRegistered &&
         !global.situationPosted) {
-        restClient.postSituationConfiguration({ PRIVATESIT: predefined_situation }, function(err, res){
+        restClient.postSituationConfiguration({ PRIVATESIT: predefined_situation }, function(err, res) {
             if (err) { return; }
             if (res && ((res.statusCode >= 200 && res.statusCode < 300) || res.statusCode === 409)) {
                 logger.debug('json-sender.js', 'Situation is posted successfully');
@@ -697,7 +743,7 @@ JsonSender.prototype.send = function send(data) {
     var dimensions_content = {};
     if (this.isicp) {
         if (this.serviceNames.length <= 0) {
-            this.serviceNames = k8sutil.getFullServiceName();
+            this.serviceNames = k8sutil.getServiceName();
         }
         for (var i = 0, len = this.serviceNames.length; i < len; i++) {
             dimensions_content[this.serviceNames[i]] = 'serviceIds';
@@ -705,14 +751,15 @@ JsonSender.prototype.send = function send(data) {
         if (this.serviceNames.length >= 0) {
             dimensions_content['serviceName'] = this.serviceNames[0];
         }
-        if (global.podId) {
-            dimensions_content['podId'] = global.podId;
-        }
         if (global.podName) {
             dimensions_content['podName'] = global.podName;
         }
         if (global.containerId) {
             dimensions_content['containerId'] = 'docker://' + global.containerId;
+        }
+        var namespace = k8sutil.getNamespace();
+        if (namespace) {
+            dimensions_content['nameSpace'] = namespace;
         }
     }
     // special code for feature ut end
@@ -729,7 +776,8 @@ JsonSender.prototype.send = function send(data) {
 
         var enginePayloadMeta = {
             resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
-                process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+                process.env.KNJ_NODEAPPLICATIONRUNTIME_ID :
+                (this.isicp ? this.nodeAppRuntimeString : this.nodeAppRuntimeMD5String),
             timestamp: new Date().toISOString()
         };
         var gcPayload = this.genGCPayload(dimensions_content,
@@ -834,7 +882,8 @@ JsonSender.prototype.genGCPayload = function genGCPayload(dimensions_content,
                 incrementalMarkingGcCount: data.GC.gc_iCount,
                 processWeakCallbacksGcCount: data.GC.gc_wCount,
                 usedHeap: data.GC.gc_heapUsed,
-                heapSize: data.GC.gc_heapSize
+                heapSize: data.GC.gc_heapSize,
+                heapUtilization: data.GC.gc_heapUsed / data.GC.gc_heapSize
             }
         }, {
             tags: commonTools.merge([dimensions_content,
@@ -847,7 +896,8 @@ JsonSender.prototype.genGCPayload = function genGCPayload(dimensions_content,
 JsonSender.prototype.genReqSumm = function genReqSumm(dimensions_content, data) {
     var requestSummary = {
         resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
-            process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+            process.env.KNJ_NODEAPPLICATIONRUNTIME_ID :
+            (this.isicp ? this.nodeAppRuntimeString : this.nodeAppRuntimeMD5String),
         tags: commonTools.merge([dimensions_content,
             { _componentType: 'requestSummary' }
         ]),
@@ -872,7 +922,8 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
         var req = data.httpReq[index];
         requestsSummaryPayload.push({
             resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
-                process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+                process.env.KNJ_NODEAPPLICATIONRUNTIME_ID :
+                (this.isicp ? this.nodeAppRuntimeString : this.nodeAppRuntimeMD5String),
             timestamp: new Date().toISOString(),
             tags: commonTools.merge([dimensions_content,
                 {
@@ -891,10 +942,11 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
                 errorRate: req['ERROR_RATE']
             }
         });
-        for (let respIndex = 0; respIndex < req.goodResps.length; respIndex++){
+        for (let respIndex = 0; respIndex < req.goodResps.length; respIndex++) {
             var oneMetric = {
                 resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
-                    process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+                    process.env.KNJ_NODEAPPLICATIONRUNTIME_ID :
+                    (this.isicp ? this.nodeAppRuntimeString : this.nodeAppRuntimeMD5String),
                 timestamp: (new Date(req.goodResps[respIndex].timestamp)).toISOString(),
                 tags: commonTools.merge([dimensions_content,
                     {
@@ -914,10 +966,11 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
             requestsRecordsPayload.push(oneMetric);
         }
         var requestErrorCounts = {};
-        for (let respIndex = 0; respIndex < req.badResps.length; respIndex++){
+        for (let respIndex = 0; respIndex < req.badResps.length; respIndex++) {
             var badMetric = {
                 resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
-                    process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+                    process.env.KNJ_NODEAPPLICATIONRUNTIME_ID :
+                    (this.isicp ? this.nodeAppRuntimeString : this.nodeAppRuntimeMD5String),
                 timestamp: (new Date(req.badResps[respIndex].timestamp)).toISOString(),
                 tags: commonTools.merge([dimensions_content,
                     {
@@ -936,7 +989,7 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
             };
             requestsRecordsPayload.push(badMetric);
             var requestErrorCountsKey = badMetric.tags.requestName + '|' + badMetric.tags.requestType;
-            if (req.badResps[respIndex].statusCode >= 400 && req.badResps[respIndex].statusCode < 500){
+            if (req.badResps[respIndex].statusCode >= 400 && req.badResps[respIndex].statusCode < 500) {
                 requestErrorCountsKey += ('|4xx');
             } else {
                 requestErrorCountsKey += ('|5xx');
@@ -956,7 +1009,8 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
             var keyDetails = key.split('|');
             requestsRecordsPayload.push({
                 resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
-                    process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+                    process.env.KNJ_NODEAPPLICATIONRUNTIME_ID :
+                    (this.isicp ? this.nodeAppRuntimeString : this.nodeAppRuntimeMD5String),
                 timestamp: (new Date()).toISOString(),
                 tags: commonTools.merge([dimensions_content,
                     {
@@ -974,7 +1028,7 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
             });
         }
     }
-    return {summary: requestsSummaryPayload, record: requestsRecordsPayload, errorCount: errorCountPayload};
+    return { summary: requestsSummaryPayload, record: requestsRecordsPayload, errorCount: errorCountPayload };
 
 };
 
@@ -1033,7 +1087,8 @@ JsonSender.prototype.sendAAR = function(req_inst) {
                 softwareServerType: 'http://open-services.net/ns/crtv#NodeJS',
                 softwareModuleName: this.applicationName,
                 resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
-                        process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String,
+                    process.env.KNJ_NODEAPPLICATIONRUNTIME_ID :
+                    (this.isicp ? this.nodeAppRuntimeString : this.nodeAppRuntimeMD5String),
                 processID: process.pid,
                 diagnosticsEnabled: commonTools.testTrue(process.env.KNJ_ENABLE_DEEPDIVE),
                 applicationName: this.applicationName,
