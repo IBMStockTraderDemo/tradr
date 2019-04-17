@@ -25,6 +25,7 @@ var MonitoringPlugin = function() {
 
 MonitoringPlugin.prototype.init = function(envType) {
     process.env.KNJ_ENVTYPE = envType;
+    global.KNJ_TT_MAX_LENGTH = 128;
 
     metricManager.start(envType);
 
@@ -53,7 +54,6 @@ MonitoringPlugin.prototype.init = function(envType) {
             process.env.MONITORING_SERVER_TYPE === 'BI') { // Bluemix
             process.env.KNJ_ENABLE_DEEPDIVE = true;
             healthcenter.enable('requests', requestConfig);
-            // healthcenter.enable('trace');
             if (!commonTools.testTrue(process.env.KNJ_DISABLE_METHODTRACE)) {
                 process.env.KNJ_ENABLE_METHODTRACE = true;
                 healthcenter.enable('trace');
@@ -88,7 +88,7 @@ MonitoringPlugin.prototype.init = function(envType) {
             }
         }
     }
-    config.update(cfg);
+    // config.update(cfg);
 };
 
 exports.monitoringPlugin = new MonitoringPlugin();
