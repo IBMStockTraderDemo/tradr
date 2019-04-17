@@ -6,6 +6,7 @@
 var fs = require('fs');
 var url = require('url');
 var crypto = require('crypto');
+const zipkin = require('../appmetrics-zipkin/index.js');
 var restClient = require('ibmapm-restclient');
 var aarTools = require('./tool/aartools');
 var adrTools = require('./tool/adrtools');
@@ -19,7 +20,7 @@ var serviceEndPointResIDs = [];
 var hostPorts = {};
 var predefined_situation = require('../etc/predefined_situation.json');
 var dcConfig = require('./config.js');
-var queryProviderInterval;
+// var queryProviderInterval;
 var queryProviderRetry = 0;
 var configurationInitialized = false;
 
@@ -175,6 +176,7 @@ var dcConfiguration = {
 };
 
 JsonSender.prototype.registerDC = function registerDC() {
+    if (global.providerIsRegistered) { return; }
     var dcObj = {
         id: process.env.KNJ_PROVIDER_ID ? process.env.KNJ_PROVIDER_ID : this.dcMD5String,
         type: ['provider'],
@@ -205,8 +207,8 @@ JsonSender.prototype.registerDC = function registerDC() {
     restClient.registerDC(dcObj, function(error, res) {
         if (error) { return; }
         if (res && ((res.statusCode >= 200 && res.statusCode < 300) || res.statusCode === 409)) {
-            queryProviderInterval = setInterval(function() {
-                restClient.getDC(function(getDCerror, getDCres) {
+            var queryProviderInterval = setInterval(function() {
+                restClient.getDC(dcObj.id, function(getDCerror, getDCres) {
                     queryProviderRetry++;
                     if (getDCerror) {
                         clearInterval(queryProviderInterval);
@@ -224,6 +226,7 @@ JsonSender.prototype.registerDC = function registerDC() {
                             var providerJson = JSON.parse(providerString);
                             if (providerJson && providerJson._items && providerJson._items.length === 1) {
                                 clearInterval(queryProviderInterval);
+                                global.providerIsRegistered = true;
                                 restClient.postDCConfiguration(dcConfiguration, 'NodejsDC', function(posterr, postres) {
                                     if (posterr) { return; }
                                     if (postres && ((postres.statusCode >= 200 && postres.statusCode < 300) ||
@@ -386,6 +389,8 @@ JsonSender.prototype.init = function init(envType) {
                 APP_PORT: the_port
             };
         }
+
+        zipkin.updateServiceName(this.applicationName);
     } catch (e) {
         logger.error('JsonSender initialization error: ' + e);
         logger.error(e.stack);
@@ -450,11 +455,14 @@ JsonSender.prototype.registerAppModel = function registerAppModel() {
                 if (err) { return; }
                 if (res.statusCode === 409) {
                     restClient.updateResource(interfaceObj, res.headers.location);
+                    global.SERVICEENDPOINT_REGISTED = true;
+                } else if (res.statusCode < 400) {
+                    global.SERVICEENDPOINT_REGISTED = true;
                 }
             });
         }
         this.registerDC();
-        this.registerAppRuntime(interfaceObj.properties.port);
+        this.registerAppRuntime(interfaceObj && interfaceObj.properties.port);
     }
 };
 JsonSender.prototype.registerAppRuntime = function registerAppRuntime(urlPort) {
@@ -537,6 +545,9 @@ JsonSender.prototype.registerAppModelOnPre = function registerAppModelOnPre(reqD
         if (err) { return; }
         if (res.statusCode === 409) {
             restClient.updateResource(interfaceObj, res.headers.location);
+            global.SERVICEENDPOINT_REGISTED = true;
+        } else if (res.statusCode < 400) {
+            global.SERVICEENDPOINT_REGISTED = true;
         }
     });
     this.registerDC();
@@ -590,18 +601,32 @@ JsonSender.prototype.registerAppModelOnICP = function registerAppModelOnICP() {
     var svcArr = k8sutil.getServicesConn();
     var nodePort = [];
     var nodeIP = [];
+
     for (var index = 0; index < svcArr.length; index++) {
         var svc = svcArr[index];
-        var serviceID = commonTools.uid_service(k8sutil.getNamespace(), 'serviceEndpoint', svc.name);
+        var serviceID = commonTools.uid_service('serviceEndpoint', k8sutil.getNamespace(), svc.name, svc.uid);
         serviceEndPointResIDs.push(serviceID);
+        var serviceName;
+        if (this.serviceNames.length <= 0) {
+            this.serviceNames = k8sutil.getServiceName();
+        }
+        if (this.serviceNames.length > 0) {
+            serviceName = commonTools.polishServiceName(k8sutil.getK8MProviderId(),
+                    k8sutil.getNamespace(), this.serviceNames[0]);
+        } else {
+            serviceName = commonTools.polishServiceName(k8sutil.getK8MProviderId(),
+                k8sutil.getNamespace(), this.applicationName);
+        }
+        zipkin.updateServiceName(serviceName);
         var interfaceObj = {
             id: process.env.KNJ_SERVICEENDPOINTS_ID ? process.env.KNJ_SERVICEENDPOINTS_ID : serviceID,
             type: ['serviceEndpoint'],
             properties: {
-                name: this.applicationName,
+                name: serviceName,
                 namespace: k8sutil.getNamespace(),
                 connections: svc.connections,
                 mergeTokens: svc.mergeTokens.concat([svc.uid]),
+                clusterName: global.clusterName ? global.clusterName : 'unnamedcluster',
                 tags: ['deployment:' + getDeployment(), 'serviceEndpoint']
             }
         };
@@ -624,18 +649,22 @@ JsonSender.prototype.registerAppModelOnICP = function registerAppModelOnICP() {
             if (err) { return; }
             if (res.statusCode === 409) {
                 restClient.updateResource(interfaceObj, res.headers.location);
+                global.SERVICEENDPOINT_REGISTED = true;
+            } else if (res.statusCode < 400) {
+                global.SERVICEENDPOINT_REGISTED = true;
             }
         });
     }
 
     this.registerDC();
     this.registerAppRuntimeOnICP(Array.from(new Set(nodePort)), Array.from(new Set(nodeIP)));
-    global.SERVICEENDPOINT_REGISTED = true;
 };
 
 JsonSender.prototype.registerAppRuntimeOnICP = function registerAppRuntimeOnICP(nodePort, nodeIP) {
     logger.debug('json-sender.js', 'registerAppRuntimeOnICP', 'start');
     if (!k8sutil.getContainerName() || !k8sutil.getContainerFullID()) {
+        logger.warn('Not get containerName and containerID yet, postpond resource register.');
+        k8sutil.reinit();
         return;
     }
     const runtimeObj = {
@@ -651,6 +680,7 @@ JsonSender.prototype.registerAppRuntimeOnICP = function registerAppRuntimeOnICP(
             port: nodePort ? nodePort.join(',') : 0,
             tags: ['deployment:' + getDeployment(), 'serviceInstance'],
             namespace: k8sutil.getNamespace(),
+            clusterName: global.clusterName ? global.clusterName : 'unnamedcluster',
             mergeTokens: [
                 k8sutil.getNodeName() + '.' + k8sutil.getNamespace() +
                 '.' + k8sutil.getPodID() + '.' + k8sutil.getContainerName(),
@@ -699,19 +729,89 @@ JsonSender.prototype.registerAppRuntimeOnICP = function registerAppRuntimeOnICP(
     });
 };
 
+var lastRegisterTimestamp;
+function registerCheck() {
+    var curr = new Date();
+    logger.debug('registerCheck: curr', curr, 'lastRegisterTimestamp', lastRegisterTimestamp);
+    if (!global.nodeApplicationRuntimeIsRegistered) {
+        return true;
+    } else if (!global.clusterId && curr - lastRegisterTimestamp >= 600000){
+        return true;
+    } else if (curr - lastRegisterTimestamp >= 1800000){
+        return true;
+    } else return false;
+}
 
 JsonSender.prototype.dynamicRegister = function dynamicRegister(env) {
-    logger.debug('json-sender.js', 'dynamicRegister', this.registeredAll);
-    if (this.registeredAll) {
-        return;
-    }
+    var doRegister = registerCheck();
+    logger.debug('json-sender.js', 'dynamicRegister', doRegister);
+    if (!doRegister) { return; }
+    lastRegisterTimestamp = new Date();
+    var self = this;
     if (this.isicp) {
-        this.registerAppModelOnICP();
-    } else if (this.vcap) {
-        this.registerAppModel();
+        k8sutil.fetchK8MProviderID(function(){
+            if (k8sutil.getK8MProviderId()) {
+                restClient.getDC(k8sutil.getK8MProviderId(), function(err, res) {
+                    if (err) {
+                        self.registerAppModelOnICP();
+                        return;
+                    }
+                    logger.debug('Get k8m provider status code:', res.statusCode);
+                    res.on('data', function(d){
+                        try {
+                            var content = JSON.parse(d.toString());
+                            if (content && content._items && content._items.length === 1) {
+                                var _id = content._items[0]._id;
+                                logger.debug('Get cluster provider id:', _id);
+                                restClient.queryRelationship(_id, function(relerr, relres){
+                                    if (relerr) {
+                                        self.registerAppModelOnICP();
+                                        return;
+                                    }
+                                    logger.debug('Get k8m relationship status code:', relres.statusCode);
+                                    relres.on('data', function(rel){
+                                        var relationships = JSON.parse(rel.toString());
+                                        if (relationships && relationships._items && relationships._items.length >= 1) {
+                                            if (relationships._items.length === 1) {
+                                                global.clusterId = relationships._items[0].uid;
+                                                global.clusterName = relationships._items[0].name;
+                                                logger.debug('Get clusterId:', global.clusterId);
+                                                self.registerAppModelOnICP();
+                                                return;
+                                            } else {
+                                                for (var i = 0; i < relationships._items.length; i++) {
+                                                    var item = relationships._items[i];
+                                                    if (item.type === 'k8sCluster') {
+                                                        global.clusterId = item.uid;
+                                                        global.clusterName = item.name;
+                                                        logger.debug('Get clusterId:', global.clusterId);
+                                                        self.registerAppModelOnICP();
+                                                        return;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    });
+                                });
+                            } else {
+                                self.registerAppModelOnICP();
+                                return;
+                            }
+                        } catch (e) {
+                            logger.warn('Failed to get clusterName', e);
+                            self.registerAppModelOnICP();
+                        }
+                    });
+                });
+            } else {
+                self.registerAppModelOnICP();
+            }
+        });
     }
 
-    this.registeredAll = true;
+    if (!global.nodeApplicationRuntimeIsRegistered) {
+        this.registerAppModel();
+    }
 };
 
 JsonSender.prototype.setEnvironment = function setEnvironment(env) {
@@ -719,6 +819,17 @@ JsonSender.prototype.setEnvironment = function setEnvironment(env) {
     this.isAppMetricInitialized = true;
     this.environment = env;
 };
+function getIp(){
+    var ips = os.networkInterfaces();
+    for (var k in ips){
+        for (var i = 0; ips[k] && i < ips[k].length; i++) {
+            var theIp = ips[k][i];
+            if (!theIp.internal && theIp.family === 'IPv4'){
+                return theIp.address;
+            }
+        }
+    }
+}
 
 JsonSender.prototype.send = function send(data) {
     if (data == null || data.appInfo == null) {
@@ -734,7 +845,6 @@ JsonSender.prototype.send = function send(data) {
             if (err) { return; }
             if (res && ((res.statusCode >= 200 && res.statusCode < 300) || res.statusCode === 409)) {
                 logger.debug('json-sender.js', 'Situation is posted successfully');
-                restClient.sendNotify({});
                 global.situationPosted = true;
             }
         });
@@ -746,10 +856,18 @@ JsonSender.prototype.send = function send(data) {
             this.serviceNames = k8sutil.getServiceName();
         }
         for (var i = 0, len = this.serviceNames.length; i < len; i++) {
-            dimensions_content[this.serviceNames[i]] = 'serviceIds';
+            dimensions_content[commonTools.polishServiceName(k8sutil.getK8MProviderId(),
+                    k8sutil.getNamespace(), this.serviceNames[i])] = 'serviceIds';
         }
-        if (this.serviceNames.length >= 0) {
-            dimensions_content['serviceName'] = this.serviceNames[0];
+        if (this.serviceNames.length > 0) {
+            dimensions_content['serviceName'] = commonTools.polishServiceName(k8sutil.getK8MProviderId(),
+                    k8sutil.getNamespace(), this.serviceNames[0]);
+        } else {
+            dimensions_content['serviceName'] = commonTools.polishServiceName(k8sutil.getK8MProviderId(),
+                k8sutil.getNamespace(), this.applicationName);
+        }
+        if (serviceEndPointResIDs.length > 0) {
+            dimensions_content['serviceId'] = serviceEndPointResIDs[0];
         }
         if (global.podName) {
             dimensions_content['podName'] = global.podName;
@@ -761,8 +879,27 @@ JsonSender.prototype.send = function send(data) {
         if (namespace) {
             dimensions_content['nameSpace'] = namespace;
         }
+        if (global.clusterId) {
+            dimensions_content['clusterID'] = global.clusterId;
+        } else {
+            dimensions_content['clusterID'] = 'unnamedcluster';
+        }
     }
-    // special code for feature ut end
+    var ibmapmContext = JSON.parse(JSON.stringify(dimensions_content));
+    if (this.isicp) {
+        ibmapmContext.nodeName = k8sutil.getNodeName();
+        ibmapmContext.ip = k8sutil.getNodeIPs()[0];
+        ibmapmContext['resource.id'] = process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
+            process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeString;
+    } else {
+        ibmapmContext.ip = getIp();
+        ibmapmContext['resource.id'] = process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
+            process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeMD5String;
+    }
+    ibmapmContext.hostname = os.hostname();
+    ibmapmContext['applicationName'] = this.applicationName;
+    ibmapmContext['tenantId'] = process.env.APM_TENANT_ID;
+    zipkin.updateIbmapmContext(ibmapmContext);
 
     var reqSummPayload = this.genReqSumm(dimensions_content, data);
     metricPayloads.push(reqSummPayload);
@@ -783,6 +920,10 @@ JsonSender.prototype.send = function send(data) {
         var gcPayload = this.genGCPayload(dimensions_content,
             data, enginePayloadMeta);
         metricPayloads.push(gcPayload);
+
+        var saturationPayload = this.genSaturationPayload(dimensions_content,
+            data, enginePayloadMeta);
+        metricPayloads.push(saturationPayload);
 
         var elPayload = this.genELPayload(dimensions_content,
             data, enginePayloadMeta);
@@ -882,30 +1023,53 @@ JsonSender.prototype.genGCPayload = function genGCPayload(dimensions_content,
                 incrementalMarkingGcCount: data.GC.gc_iCount,
                 processWeakCallbacksGcCount: data.GC.gc_wCount,
                 usedHeap: data.GC.gc_heapUsed,
-                heapSize: data.GC.gc_heapSize,
-                heapUtilization: data.GC.gc_heapUsed / data.GC.gc_heapSize
+                heapSize: data.GC.gc_heapSize
             }
         }, {
             tags: commonTools.merge([dimensions_content,
-                { _componentType: 'garbageCollector' }
+                { _componentType: 'nodeApplicationRuntime' }
             ])
         }
     ]);
     return gcPayload;
 };
+
+JsonSender.prototype.genSaturationPayload = function genSaturationPayload(dimensions_content,
+    data, enginePayloadMeta) {
+    var saturationPayload = commonTools.merge([
+        enginePayloadMeta, {
+            metrics: {
+                saturation: data.GC.gc_heapSize === 0 ? 0 : data.GC.gc_heapUsed * 100 / data.GC.gc_heapSize
+            }
+        }, {
+            tags: commonTools.merge([dimensions_content,
+                {
+                    _componentType: 'saturations',
+                    saturationType: 'memory',
+                    includeGoldenSignals: 'true'
+                }
+            ])
+        }
+    ]);
+    return saturationPayload;
+};
+
 JsonSender.prototype.genReqSumm = function genReqSumm(dimensions_content, data) {
     var requestSummary = {
         resourceID: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
             process.env.KNJ_NODEAPPLICATIONRUNTIME_ID :
             (this.isicp ? this.nodeAppRuntimeString : this.nodeAppRuntimeMD5String),
         tags: commonTools.merge([dimensions_content,
-            { _componentType: 'requestSummary' }
+            {
+                _componentType: 'requestSummary',
+                includeGoldenSignals: 'true'
+            }
         ]),
         metrics: commonTools.merge([{
             // responseTime_50th: data.appInfo.responseTime_50th,
             // responseTime_90th: data.appInfo.responseTime_90th,
             // responseTime_95th: data.appInfo.responseTime_95th,
-            requestRate: data.appInfo.REQRATE,
+            traffic: data.appInfo.REQRATE,
             requestErrorRate: data.appInfo.requestErrorRate,
             averageResponseTime: data.appInfo.RESP_TIME,
             slowestResponseTime: data.appInfo.MAX_RSPTIME
@@ -953,14 +1117,16 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
                         applicationName: this.applicationName,
                         requestName: req['URL'],
                         requestType: req['METHOD'],
+                        requestMethod: req['METHOD'],
                         _componentType: 'requestMetrics',
                         status: 'success',
                         statusCode: req.goodResps[respIndex].statusCode + '',
-                        requestDetail: req.goodResps[respIndex].url_prefix + req['URL']
+                        requestDetail: req.goodResps[respIndex].url_prefix + req['URL'],
+                        includeGoldenSignals: 'true'
                     }
                 ]),
                 metrics: {
-                    requestResponseTime: req.goodResps[respIndex].resp
+                    latency: req.goodResps[respIndex].resp
                 }
             };
             requestsRecordsPayload.push(oneMetric);
@@ -984,7 +1150,7 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
                     }
                 ]),
                 metrics: {
-                    requestResponseTime: req.badResps[respIndex].resp
+                    latency: req.badResps[respIndex].resp
                 }
             };
             requestsRecordsPayload.push(badMetric);
@@ -1005,6 +1171,7 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
         }
 
         for (var key in requestErrorCounts) {
+            if (!requestErrorCounts[key]) { continue; }
             var errorCount = requestErrorCounts[key].errorCount;
             var keyDetails = key.split('|');
             requestsRecordsPayload.push({
@@ -1017,13 +1184,15 @@ JsonSender.prototype.genRequestSummaries = function genRequestSummaries(dimensio
                         applicationName: this.applicationName,
                         requestName: keyDetails[0],
                         requestType: keyDetails[1],
+                        requestMethod: keyDetails[1],
                         _componentType: 'errorMetrics',
                         errorCode: keyDetails[2],
-                        requestDetail: requestErrorCounts[key].requestDetail
+                        requestDetail: requestErrorCounts[key].requestDetail,
+                        includeGoldenSignals: 'true'
                     }
                 ]),
                 metrics: {
-                    errorCount: errorCount
+                    error: errorCount
                 }
             });
         }
@@ -1049,7 +1218,7 @@ JsonSender.prototype.genSysInfo = function genSysInfo(dimensions_content, data, 
             }
         }, {
             tags: commonTools.merge([dimensions_content,
-                { _componentType: 'sysInfo' }
+                { _componentType: 'nodeApplicationRuntime' }
             ])
         }
     ]);

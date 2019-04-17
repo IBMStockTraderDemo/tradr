@@ -1,23 +1,16 @@
 {
-    "name": "ibmapm",
-    "main": "./index.js",
-    "version": "2.0.45",
-    "readme": "Node.js Data Collector",
-    "description": "Node.js data collector for IBM BAM",
+    "name": "ibmapm-restclient",
+    "main": "./lib/restclient/httpsender.js",
+    "version": "1.1.7",
+    "readme": "Node.js Rest Client",
+    "description": "Node.js rest client for ICAM.",
     "dependencies": {
-        "appmetrics": "^4.0.1",
-        "log4js": "^0.6.38",
-        "properties": "^1.2.1",
-        "uuid": "^2.0.2",
-        "properties-reader": "0.0.16",
-        "tcp-ping": "^0.1.1",
-        "zipkin": "0.10.1",
-        "zipkin-context-cls": "0.6.1",
-        "zipkin-transport-http": "0.10.1",
         "https-proxy-agent": "^2.2.1",
         "kubernetes-client": "^3.16.0",
-        "request": "^2.72.0"
-
+        "log4js": "^0.6.38",
+        "properties": "^1.2.1",
+        "request": "^2.72.0",
+        "uuid": "^2.0.2"
     },
     "devDependencies": {
         "chai": "^3.5.0",
@@ -33,8 +26,7 @@
         "intercept-stdout": "~0.1.2",
         "nyc": "^11.0.2",
         "tap": "12.x",
-        "tap-junit": "2.0.0",
-        "https-proxy-agent":"^2.2.1"
+        "tap-junit": "2.0.0"
     },
     "scripts": {
         "test": "./node_modules/.bin/nyc --cache ./node_modules/.bin/tap --timeout=120 tests/*tests.js | tap-junit --output . --name jenkins-test-results",
@@ -43,7 +35,7 @@
     "license": "Apache-2.0",
     "bugs": {
         "email": "yuecchen@cn.ibm.com",
-        "url": "https://github.com/IBM/node-ibmapm/issues"
+        "url": "https://github.com/IBM/node-ibmapm-restclient/issues"
     },
     "author": {
         "name": "Yue Chen",
@@ -51,9 +43,10 @@
     },
     "repository": {
         "type": "git",
-        "url": "git@github.com:IBM/node-ibmapm.git"
+        "url": "git@github.com:IBM/node-ibmapm-restclient.git"
     },
-    "contributors": [{
+    "contributors": [
+        {
             "name": "Hui Jun Song",
             "email": "songhj@cn.ibm.com"
         },
@@ -66,16 +59,12 @@
             "email": "rgadekar@us.ibm.com"
         },
         {
-            "name": "Chi Yang Li",
-            "email": "bjcyli@cn.ibm.com"
-        },
-        {
             "name": "Yanfeng Shi",
             "email": "shiyanf@cn.ibm.com"
         }
     ],
     "keywords": [
-        "appmetrics",
+        "restclient",
         "apm",
         "ibm",
         "performance",

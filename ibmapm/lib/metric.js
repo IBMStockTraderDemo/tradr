@@ -595,6 +595,9 @@ Metric.prototype.collectRunTimeInfo = function collectRunTimeInfo(zeroRunCallbac
 };
 
 Metric.prototype.addHttpRequest = function addHttpRequest(req, responseTime) {
+    if (req.url && req.url.length > global.KNJ_TT_MAX_LENGTH) {
+        req.url = req.url.substr(0, global.KNJ_TT_MAX_LENGTH);
+    }
     var identifier = req.method + ' ' + req.url;
     if (commonTools.testTrue(process.env.ITCAM_DC_ENABLED) &&
         commonTools.testTrue(process.env.KNJ_ENABLE_TT)) {
@@ -824,11 +827,6 @@ Metric.prototype.getJSONAppInfo = function getJSONAppInfo() {
             goodResps = goodResps.concat(request.goodResps);
         }
     }
-    // var goodPercentile = commonTools.getPercentile(goodResps);
-
-    // jsonData.responseTime_50th = goodPercentile.percentile_50th;
-    // jsonData.responseTime_90th = goodPercentile.percentile_90th;
-    // jsonData.responseTime_95th = goodPercentile.percentile_95th;
 
     return jsonData;
 };
@@ -1095,10 +1093,6 @@ Metric.prototype.getJSONHttpReq = function getJSONHttpReq() {
                 goodResps: request.goodResps,
                 badResps: request.badResps
             };
-            // var goodPercentile = commonTools.getPercentile(request.goodResps);
-            // jsonRequestData.requestSummary_ResponseTime_50th = goodPercentile.percentile_50th;
-            // jsonRequestData.requestSummary_ResponseTime_90th = goodPercentile.percentile_90th;
-            // jsonRequestData.requestSummary_ResponseTime_95th = goodPercentile.percentile_95th;
 
             jsonDataArray.push(jsonRequestData);
         }
