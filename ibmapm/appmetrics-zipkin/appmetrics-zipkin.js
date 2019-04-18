@@ -23,6 +23,11 @@ var aspect = require('./lib/aspect.js');
 var fs = require('fs');
 var PropertyReader = require('properties-reader');
 var properties = PropertyReader(__dirname + '/appmetrics-zipkin.properties');
+var {Endpoint} = require('zipkin/lib/model');
+Endpoint.prototype.setServiceName = function setServiceName(serviceName) {
+  // In zipkin, names are lowercase. This eagerly converts to alert users early.
+  this.serviceName = serviceName ? serviceName : undefined;
+};
 
 const {
   BatchRecorder
