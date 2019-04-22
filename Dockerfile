@@ -23,7 +23,7 @@ RUN apk update && apk upgrade && apk add --no-cache git && apk add --no-cache li
 #RUN apt-get update && apt-get install -y nodejs && apt-get install -y npm 
 
 COPY . /usr/src/app/
-RUN npm install ./ibmapm
+#RUN npm install ./ibmapm
 RUN npm install --no-optional
 RUN npm run build
 
