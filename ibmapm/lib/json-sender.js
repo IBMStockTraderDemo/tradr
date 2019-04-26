@@ -437,6 +437,7 @@ function generateAppNameByPackage() {
 JsonSender.prototype.registerAppModel = function registerAppModel() {
     if (this.vcap && !global.RESOURCE_SVCEP_REGISTED) {
         global.RESOURCE_SVCEP_REGISTED = true;
+        serviceEndPointResIDs = [];
         for (var index = 0; index < this.vcap.application_uris.length; index++) {
             var uri = this.vcap.application_uris[index];
             var interfaceMD5String = crypto.createHash('MD5').update(uri + ':' + this.vcap.port)
@@ -539,7 +540,6 @@ JsonSender.prototype.registerAppModelOnPre = function registerAppModelOnPre(reqD
             tags: ['deployment:' + getDeployment(), 'serviceEndpoint']
         }
     };
-
     serviceEndPointResIDs.push(interfaceObj.id);
     restClient.registerResource(interfaceObj, function(err, res){
         if (err) { return; }
@@ -601,7 +601,7 @@ JsonSender.prototype.registerAppModelOnICP = function registerAppModelOnICP() {
     var svcArr = k8sutil.getServicesConn();
     var nodePort = [];
     var nodeIP = [];
-
+    serviceEndPointResIDs = [];
     for (var index = 0; index < svcArr.length; index++) {
         var svc = svcArr[index];
         var serviceID = commonTools.uid_service('serviceEndpoint', k8sutil.getNamespace(), svc.name, svc.uid);
@@ -667,6 +667,8 @@ JsonSender.prototype.registerAppRuntimeOnICP = function registerAppRuntimeOnICP(
         k8sutil.reinit();
         return;
     }
+    this.nodeAppRuntimeString = commonTools.uid_po(k8sutil.getNamespace(), k8sutil.getPodName(),
+        k8sutil.getContainerName(), 'nodeApplicationRuntime');
     const runtimeObj = {
         id: process.env.KNJ_NODEAPPLICATIONRUNTIME_ID ?
             process.env.KNJ_NODEAPPLICATIONRUNTIME_ID : this.nodeAppRuntimeString,
